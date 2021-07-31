@@ -6,4 +6,7 @@
  -- hasnt been tested on windows yet --  
 
 # improvements are welcome :)   
-# python3 chess.py
+to play run `python3 chess.py`
+
+
+[free for non commercial use]

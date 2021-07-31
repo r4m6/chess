@@ -14,7 +14,7 @@ def end():
 
 # updates time passed since start
 def updateTime():
-    whitespace = str(" " * 20) # since a menuitem (used as clock) is not positionable, whitespaces are used to place clock further right
+    whitespace = str(" " * 100) # since a menuitem (used as clock) is not positionable, whitespaces are used to place clock further right
     seconds = 0
     minutes = 0
     while threading.main_thread().is_alive():
@@ -151,11 +151,14 @@ def move(piece, x, y):
         piece[0].place(x=x, y=y, anchor="nw")
 
 ## MouseListener
-# TO:DO evaluate piece to move
-#       function for replacing pieces
-#                   for logic checks 
 def on_click(x, y, button, pressed):
-    if isTopLevel():
+    check = False
+    try:
+        check = isTopLevel()
+    except:
+        return
+
+    if check:
         pos = getPos(x, y)
         x = pos[0]
         y = pos[1]
@@ -192,7 +195,6 @@ def validateTurn(chosenPiece, targetX, targetY):
     name = str(chosenPiece[4])
     x = int(chosenPiece[1])
     y = int(chosenPiece[2])
-    print("x",x,"y",y,"targetX",targetX,"targetY",targetY)
 
     # no move made, return
     if x==targetX and y==targetY:
@@ -219,7 +221,8 @@ def validateTurn(chosenPiece, targetX, targetY):
         if not validateKing(chosenPiece, targetX, targetY):
             return False
     elif name.startswith("pawn"):
-        print
+        if not validatePawn(chosenPiece, targetX, targetY):
+            return False
 
     # checks if an other piece is targeted
     for piece in pieces:
@@ -341,10 +344,54 @@ def validateKing(king, targetX, targetY):
     # check if moving only 1 field
     if (max(x, targetX) - min(x, targetX) <= 100) \
         and (max(y, targetY) - min(y, targetY) <= 100):
-        print("ok")
-        return True
+        # check if target field is checked by opponent
+        if isChecked(king[4][-3], targetX, targetY):
+            return False
+        else:
+            return True
+    # moving invalid
     else:
         return False
+
+def validatePawn(pawn, targetX, targetY):
+    x = pawn[1]
+    y = pawn[2]
+    print(x,y,targetX,targetY)
+    # moving backwards or more then two fields ahead
+    if (y-targetY > 200 or y-targetY < 0):
+        return False
+    # moving two fields ahead, from start position
+    elif (x==targetX and y-targetY==200 and y==600):
+        # check if piece blocks the way
+        for piece in pieces:
+            if piece[1]==x and (piece[2]==targetY or piece[2]==targetY+100):
+                return False
+        return True
+    # moving one field ahead
+    elif (x==targetX and y-targetY==100):
+        return True
+    # moving more then one field sidewards or only sidewards
+    elif (max(x, targetX) - min(x, targetX) > 100) or y==targetY:
+        return False        
+    # check if opponent is at target pos if moving diagonal
+    elif x!=targetX and y-targetY==100:
+        for piece in pieces:
+            if piece[1]==targetX and piece[2]==targetY and piece[4][-3]!=pawn[4][-3]:
+                return True
+        return False
+
+    return False
+    
+
+# check if a field is checked by the opponent, color from moving piece
+def isChecked(color, targetX, targetY):
+    # color = 3. char backwards = [-3] 
+    for piece in pieces:
+        if piece[4][-3]!=color:
+            if validateTurn(piece, targetX, targetY):
+                return True
+    return False
+            
 
 # starte Listener
 listener = mouse.Listener(on_click=on_click)
@@ -363,15 +410,15 @@ fr = tkinter.Frame(main,  height=800, width=800, bg="#FFFFFF", bd=10)
 mBar = tkinter.Menu(main)
 # erzeugt Menueobjekte der Menueleiste
 mFile = tkinter.Menu(mBar)
-mFile["tearoff"] = 0 # Menue nicht abtrennbar
+mFile["tearoff"] = 0                    # Menue nicht abtrennbar
 mFile.add_command(label="neu")
 mFile.add_command(label="laden")
 mFile.add_command(label="speichern")
 
 mBar.add_cascade(label="Datei", menu=mFile)
 mView = tkinter.Menu(mBar)
-mView["tearoff"] = 0 # Menue nicht abtrennbar
-mBar.add_cascade(label="00:00", menu=mView)
+mView["tearoff"] = 0                    # Menue nicht abtrennbar
+mBar.add_cascade(label="", menu=mView)  # Zeitanzeige wird leer generiert und später mit updateTime() aktualisiert
 
 # füge Menueleiste dem Fenster hinzu
 main["menu"] = mBar
