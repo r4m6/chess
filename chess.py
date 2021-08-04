@@ -60,9 +60,9 @@ def getBgColor(colors, x, y):
 
     return colors[y][x]
     
-def initField():
-    ## bereite Spielbrett vor
-    # platziere Felder
+# initialize fields
+def initFields():
+    fields = [] # list to save label and coords for each field [lb, x, y, color]
     path = "art/empty_white_field.png"
     color = "#FFFFFF"
     x = int(0)
@@ -72,6 +72,7 @@ def initField():
             image = tkinter.PhotoImage(file=path)
             lb = tkinter.Label(main, image=image, relief="ridge", bd=1, bg=color)
             lb.place(x=x, y=y, anchor="nw")
+            fields.append([lb, x, y, color])
 
             if color == "#FFFFFF":
                 color = "#000000"
@@ -90,8 +91,10 @@ def initField():
         else:
             color = "#FFFFFF"
             path = "art/empty_white_field.png"
+    
+    return fields
 
-##initializes and returns pieces 
+# initializes and returns pieces 
 def initPieces():
     pieces = [] # hier werden die Labels der Bilder gespeichert samt x und y-Koordinate und dem gerenderten Bild pieces[piecenr][label, x, y, image, name, selected]
     colors = getColors()
@@ -178,6 +181,8 @@ def on_click(x, y, button, pressed):
                     # move piece after validation
                     move(pieces[toMove], x, y)
                     fr.pack()
+                    # switch board for next player
+                    switchBoard()
 
 # checkt ob Fenster im Vordergrund ist
 def isTopLevel():
@@ -217,9 +222,11 @@ def validateTurn(chosenPiece, targetX, targetY):
         if not (validateTower(chosenPiece, targetX, targetY) \
                 or validateBishop(chosenPiece, targetX, targetY)):
             return False
+    # king selected
     elif name.startswith("king"):
         if not validateKing(chosenPiece, targetX, targetY):
             return False
+    # pawn selected
     elif name.startswith("pawn"):
         if not validatePawn(chosenPiece, targetX, targetY):
             return False
@@ -345,7 +352,7 @@ def validateKing(king, targetX, targetY):
     if (max(x, targetX) - min(x, targetX) <= 100) \
         and (max(y, targetY) - min(y, targetY) <= 100):
         # check if target field is checked by opponent
-        if isChecked(king[4][-3], targetX, targetY):
+        if isChecked(king, targetX, targetY):
             return False
         else:
             return True
@@ -384,14 +391,58 @@ def validatePawn(pawn, targetX, targetY):
     
 
 # check if a field is checked by the opponent, color from moving piece
-def isChecked(color, targetX, targetY):
-    # color = 3. char backwards = [-3] 
+def isChecked(king, targetX, targetY):
+    # color = 3. char backwards = [-3]
+    color = king[4][-3]
     for piece in pieces:
         if piece[4][-3]!=color:
-            if validateTurn(piece, targetX, targetY):
+            if piece[4].startswith("pawn") and (targetY-piece[2]==100) and (max(targetX, piece[1])-min(targetX, piece[1])==100): # check if a pawn checks target field
+                return True
+            elif validateTurn(piece, targetX, targetY):
                 return True
     return False
-            
+
+# switch the board for the next player
+def switchBoard():
+    global turn
+    turn += 1
+    reevaluatePieces()
+    try:
+        mBar.entryconfig(3, label = turn)
+    except:
+        print("not able to update turn label item on menu bar")
+
+# reevaluate position of pieces after each turn
+def reevaluatePieces():
+    global turn
+    colors = getColors()
+    # check xy coord and reevaluate them for the changed fields
+    for piece in pieces:
+        piece[0].destroy()      # destroy label, before rebuilding it
+        if piece[1] >= 0:       # if smaller the piece got already destroyed
+            for i in range(1,3,1):
+                if piece[i]==700:
+                    piece[i]=0
+                elif piece[i]==600:
+                    piece[i]=100
+                elif piece[i]==500:
+                    piece[i]=200
+                elif piece[i]==400:
+                    piece[i]=300
+                elif piece[i]==300:
+                    piece[i]=400
+                elif piece[i]==200:
+                    piece[i]=500
+                elif piece[i]==100:
+                    piece[i]=600
+                elif piece[i]==0:
+                    piece[i]=700
+            ## put piece label back on top level
+            image = piece[3]
+            bgcolor = getBgColor(colors, piece[1], piece[2])
+            lb = tkinter.Label(main, image=image, relief="ridge", bd=1, bg=bgcolor)
+            lb.place(x=piece[1], y=piece[2], anchor="nw")
+            piece[0] = lb
 
 # starte Listener
 listener = mouse.Listener(on_click=on_click)
@@ -411,24 +462,28 @@ mBar = tkinter.Menu(main)
 # erzeugt Menueobjekte der Menueleiste
 mFile = tkinter.Menu(mBar)
 mFile["tearoff"] = 0                    # Menue nicht abtrennbar
-mFile.add_command(label="neu")
-mFile.add_command(label="laden")
+mFile.add_command(label="neu", command=switchBoard)
+mFile.add_command(label="laden", command=reevaluatePieces)
 mFile.add_command(label="speichern")
+mFile.add_separator()
+mFile.add_command(label="beenden", command=end)
 
 mBar.add_cascade(label="Datei", menu=mFile)
 mView = tkinter.Menu(mBar)
 mView["tearoff"] = 0                    # Menue nicht abtrennbar
 mBar.add_cascade(label="", menu=mView)  # Zeitanzeige wird leer generiert und später mit updateTime() aktualisiert
+mBar.add_cascade(label="1", menu=mView) # Zugzähler
 
 # füge Menueleiste dem Fenster hinzu
 main["menu"] = mBar
 
 ##############################################################################################################################################################################################
 ## Vorbereitung Spiel
-# Spielfeld wird vorbereitet
-initField()
+# Spielfeld wird vorbereitet fields[i][label, x, y, color]
+fields = initFields()
 # Figuren werden vorbereitet und pieces freigegeben pieces[i][label(Label im Frame), x, y, image(gerendertes Bild), name(Figurname), selected(gerade ausgewählt?)] 
 pieces = initPieces()
+turn = 1
 ## Ende Spielvorbereitung
 ##############################################################################################################################################################################################
 
