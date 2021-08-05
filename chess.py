@@ -1,8 +1,9 @@
 #/usr/bin/python
 #-*- coding:utf-8 -*-
+## requirements
 # pip3 install tkinter
 # pip3 install pynput
-## lokales Schachspiel ##
+## local chess game ##
 import threading
 import time
 import tkinter
@@ -60,7 +61,7 @@ def getBgColor(colors, x, y):
 
     return colors[y][x]
     
-# initialize fields
+# initialize and returns fields
 def initFields():
     fields = [] # list to save label and coords for each field [lb, x, y, color]
     path = "art/empty_white_field.png"
@@ -96,7 +97,7 @@ def initFields():
 
 # initializes and returns pieces 
 def initPieces():
-    pieces = [] # hier werden die Labels der Bilder gespeichert samt x und y-Koordinate und dem gerenderten Bild pieces[piecenr][label, x, y, image, name, selected]
+    pieces = [] # list to save label, position of pieces[piecenr][label, x, y, image, name, selected]
     colors = getColors()
     path = ["art/tower_red.png", "art/horse_red.png", "art/bishop_red.png", "art/queen_red.png", "art/king_red.png", "art/bishop_red.png", "art/horse_red.png", "art/tower_red.png", "art/pawn_red.png"]
     x = int(0)
@@ -167,7 +168,7 @@ def on_click(x, y, button, pressed):
         y = pos[1]
         if pressed:         # mouse pressed
             for i in range(len(pieces)):
-                if (pieces[i][1]==x and pieces[i][2]==y):   # checks if a piece gets selcted by the player
+                if (pieces[i][1]==x and pieces[i][2]==y):   # checks if a piece got selected by the player
                     pieces[i][5] = True                     # piece[5] = 'selected', a boolean property to determine if the piece is selected
         else:               # mouse released
             toMove = -1
@@ -184,7 +185,7 @@ def on_click(x, y, button, pressed):
                     # switch board for next player
                     switchBoard()
 
-# checkt ob Fenster im Vordergrund ist
+# checks if chess frame is on top level
 def isTopLevel():
     width, height, x, y = main.winfo_width(), main.winfo_height(), \
                               main.winfo_rootx(), main.winfo_rooty()
@@ -195,11 +196,17 @@ def isTopLevel():
                                                 ) is not None
             return is_toplevel
 
-# validiere Zug
-def validateTurn(chosenPiece, targetX, targetY):
+# validate turn
+def validateTurn(chosenPiece, targetX, targetY, test=False):
     name = str(chosenPiece[4])
     x = int(chosenPiece[1])
     y = int(chosenPiece[2])
+
+    # check if the piece chosen belongs to the player at turn
+    if turn%2==0 and name.endswith("green") and not test:
+        return False
+    elif turn%2!=0 and name.endswith("red") and not test:
+        return False
 
     # no move made, return
     if x==targetX and y==targetY:
@@ -231,18 +238,39 @@ def validateTurn(chosenPiece, targetX, targetY):
         if not validatePawn(chosenPiece, targetX, targetY):
             return False
 
-    # checks if an other piece is targeted
-    for piece in pieces:
-        if (piece[1]==targetX and piece[2]==targetY) and (piece[0]!=chosenPiece[0]):
-            # target is of the same color
-            if (name[-3]==piece[4][-3]):
-                return False
-            else:
-                piece[0].destroy()
-                piece[1] = -1
-                piece[2] = -1
+    if not test:
+        # check if turn checks the player making the turn
+        if not name.startswith("king"):
+            chosenPiece[1] = targetX        # setting position of moving piece to target, in order to check if players checked now (lol)
+            chosenPiece[2] = targetY
+            testKing = None
+            for piece in pieces:
+                if piece[4].startswith("king") and piece[4][-3]==chosenPiece[4][-3]:
+                    testKing = [piece[0], piece[1], piece[2], piece[3], piece[4], piece[5]]        # saving king data to var to make check-tests
+                    break
 
-    print("valid: True")
+            for piece in pieces:
+                if piece[4][-3]!=testKing[4][-3]:
+                    if validateTurn(piece, testKing[1], testKing[2], test=True):
+                        print("checking yourself, fool")
+                        chosenPiece[1] = x
+                        chosenPiece[2] = y
+                        return False
+            chosenPiece[1] = x
+            chosenPiece[2] = y
+
+        # checks if an other piece is targeted
+        for piece in pieces:
+            if (piece[1]==targetX and piece[2]==targetY) and (piece[4][-3]!=chosenPiece[4][-3]):
+                # target is of the same color
+                if (name[-3]==piece[4][-3]):
+                    return False
+                else:
+                    piece[1] = -1
+                    piece[2] = -1
+                    piece[0].destroy()
+                break
+
     return True
 
 def validateTower(tower, targetX, targetY):
@@ -306,7 +334,6 @@ def validateBishop(bishop, targetX, targetY):
                 ydif = max(piece[2], targetY) - min(piece[2], targetY)
                 if (xdif==ydif and (targetX-piece[1])>0 and (x-piece[1])<0 \
                     and (targetY-piece[2])<0 and (y-piece[2])>0):
-                    print("piece between")
                     return False
         # moving left down
         elif(x > targetX and y < targetY):
@@ -363,7 +390,6 @@ def validateKing(king, targetX, targetY):
 def validatePawn(pawn, targetX, targetY):
     x = pawn[1]
     y = pawn[2]
-    print(x,y,targetX,targetY)
     # moving backwards or more then two fields ahead
     if (y-targetY > 200 or y-targetY < 0):
         return False
@@ -388,9 +414,8 @@ def validatePawn(pawn, targetX, targetY):
         return False
 
     return False
-    
 
-# check if a field is checked by the opponent, color from moving piece
+# check if a field is checked by the opponent
 def isChecked(king, targetX, targetY):
     # color = 3. char backwards = [-3]
     color = king[4][-3]
@@ -444,24 +469,24 @@ def reevaluatePieces():
             lb.place(x=piece[1], y=piece[2], anchor="nw")
             piece[0] = lb
 
-# starte Listener
+# start listener
 listener = mouse.Listener(on_click=on_click)
 listener.start()
 
-# Erstelle Frame
+# initialize frame
 main = tkinter.Tk()
 main.title("chess")
 main.resizable(0, 0)
 main.geometry("800x800+" + str(int(main.winfo_screenwidth()/2))+"+"+str(int(main.winfo_screenheight()/3))) # geometry(widthxheight+xoffset+yoffset) //offset to start from screen
-## Menueleiste
-# Zielobjekt der Menuebefehle
+## menu bar
+# target for menu commands
 fr = tkinter.Frame(main,  height=800, width=800, bg="#FFFFFF", bd=10)
 
-# erzeugt gesamte Menueleiste
+# makes total menu bar
 mBar = tkinter.Menu(main)
-# erzeugt Menueobjekte der Menueleiste
+# makes objects for menu bar
 mFile = tkinter.Menu(mBar)
-mFile["tearoff"] = 0                    # Menue nicht abtrennbar
+mFile["tearoff"] = 0                    # menu not separable
 mFile.add_command(label="neu", command=switchBoard)
 mFile.add_command(label="laden", command=reevaluatePieces)
 mFile.add_command(label="speichern")
@@ -470,38 +495,38 @@ mFile.add_command(label="beenden", command=end)
 
 mBar.add_cascade(label="Datei", menu=mFile)
 mView = tkinter.Menu(mBar)
-mView["tearoff"] = 0                    # Menue nicht abtrennbar
-mBar.add_cascade(label="", menu=mView)  # Zeitanzeige wird leer generiert und später mit updateTime() aktualisiert
-mBar.add_cascade(label="1", menu=mView) # Zugzähler
+mView["tearoff"] = 0                    # menu not separable
+mBar.add_cascade(label="", menu=mView)  # time display generated empty, later updated with updateTime()
+mBar.add_cascade(label="1", menu=mView) # turn display, initialized with '1', later updatet with var turn
 
-# füge Menueleiste dem Fenster hinzu
+# add menu bar to frame
 main["menu"] = mBar
 
 ##############################################################################################################################################################################################
-## Vorbereitung Spiel
-# Spielfeld wird vorbereitet fields[i][label, x, y, color]
+## start game preparation
+# chess board gets prepared... fields[i][label, x, y, color]
 fields = initFields()
-# Figuren werden vorbereitet und pieces freigegeben pieces[i][label(Label im Frame), x, y, image(gerendertes Bild), name(Figurname), selected(gerade ausgewählt?)] 
+# pieces get prepared... pieces[i][label(Label im Frame), x, y, image(gerendertes Bild), name(Figurname), selected(gerade ausgewählt?)] 
 pieces = initPieces()
 turn = 1
-## Ende Spielvorbereitung
+## end game preparation
 ##############################################################################################################################################################################################
 
-# starte Thread um Zeit in der Menueleiste anzuzeigen    
-global status # 0 = exit, 1 = paused, 2 = play | flag für Zeitthread [...]
+# start thread to show time in menu bar    
+global status # 0 = exit, 1 = paused, 2 = play | flags for timethread
 status = 2
 timeThread = threading.Thread(name="timeThread", target=updateTime)
 timeThread.start()
 
-# setze Frame zusammen und starte mainloop
+# put frame together and start mainloop
 fr.pack()
 main.mainloop()
 
-### Frame wurde geschlossen
-## schließe ggf. offene Instanzen
-# stoppe Zeitthread
+### at this point the frame was closed ###
+## if any, close all open instances
+# stop time thread
 status = 0
 timeThread.killed = True
 timeThread.join()
-# stoppe Listener
+# stop listener
 listener.stop()
