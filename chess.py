@@ -13,6 +13,23 @@ from pynput import mouse, keyboard
 def end():
     main.destroy()   
 
+# updates a label in menu bar - i = nth element in menubar, str = string to insert
+def setLabel(i, newLabel):
+    try:
+        if not getLabel(i)==newLabel:
+            mBar.entryconfig(i, label = newLabel)
+    except:
+        i = str(i)
+        message = "error: could not insert", newLabel, "at", i + ". menu label"
+
+# returns current i = nth menu label 
+def getLabel(i):
+    try:
+        return mBar.entrycget(i, "label")
+    except:
+        i = str(i)
+        message = "error: not able to retrieve", i + ". menu label"
+    
 # updates time passed since start
 def updateTime():
     whitespace = str(" " * 100) # since a menuitem (used as clock) is not positionable, whitespaces are used to place clock further right
@@ -21,6 +38,7 @@ def updateTime():
     while threading.main_thread().is_alive():
         # status[0:exit, 1:paused, 2:play]
         if status == 2:
+            setLabel(4, "player greens turn" if turn%2!=0 else "player reds turn")
             time.sleep(1)
             seconds += 1
             if seconds == 60:
@@ -29,12 +47,21 @@ def updateTime():
             timeStr = str(whitespace \
                         + "{:0>2}".format(minutes) + ":" \
                         + "{:0>2}".format(seconds))
-            try:
-                mBar.entryconfig(2, label = timeStr)
-            except:
-                continue
+            setLabel(2, timeStr)
+        elif status==1:
+            if not getLabel(4).endswith("wins"):
+                setLabel(4, "paused")
         elif status == 0:
+            return        
+
+def pause():
+    global status
+    try:
+        if getLabel(4).endswith("wins"):
             return
+    except:
+        return
+    status = 1 if status==2 else 2
 
 def getColors():
     # sets colors[][] for bgColor //yeah dirty here
@@ -162,6 +189,9 @@ def on_click(x, y, button, pressed):
     except:
         return
 
+    if status==0 or status==1:
+        return
+
     if check:
         pos = getPos(x, y)
         x = pos[0]
@@ -182,6 +212,8 @@ def on_click(x, y, button, pressed):
                     # move piece after validation
                     move(pieces[toMove], x, y)
                     fr.pack()
+                    # is check mate?
+                    isCheckMate()
                     # switch board for next player
                     switchBoard()
 
@@ -238,38 +270,39 @@ def validateTurn(chosenPiece, targetX, targetY, test=False):
         if not validatePawn(chosenPiece, targetX, targetY):
             return False
 
+    # check if ally is already at position
+    for piece in pieces:
+        if piece[4][-3]==name[-3]:
+            if piece[1]==targetX and piece[2]==targetY:
+                return False
+
     if not test:
-        # check if turn checks the player making the turn
-        if not name.startswith("king"):
-            chosenPiece[1] = targetX        # setting position of moving piece to target, in order to check if players checked now (lol)
-            chosenPiece[2] = targetY
-            testKing = None
-            for piece in pieces:
-                if piece[4].startswith("king") and piece[4][-3]==chosenPiece[4][-3]:
-                    testKing = [piece[0], piece[1], piece[2], piece[3], piece[4], piece[5]]        # saving king data to var to make check-tests
+        ## set position to target to test if player got checked, if not turn will be made, otherwise the position is going to be set back
+        chosenPiece[1] = targetX
+        chosenPiece[2] = targetY
+
+        # checks if an other piece is targeted, same as chosenPiece - the piece first gets removed, but if the player remains checked, move will be undone
+        hit = [False, 0] 
+        for i in range(len(pieces)):
+            if (pieces[i][1]==targetX and pieces[i][2]==targetY) and (pieces[i][4][-3]!=chosenPiece[4][-3]):
+                if not (name[-3]==pieces[i][4][-3]):
+                    hit = [True, i]
+                    pieces[i][1] = -1
+                    pieces[i][2] = -1
                     break
 
-            for piece in pieces:
-                if piece[4][-3]!=testKing[4][-3]:
-                    if validateTurn(piece, testKing[1], testKing[2], test=True):
-                        print("checking yourself, fool")
-                        chosenPiece[1] = x
-                        chosenPiece[2] = y
-                        return False
+        # move gets undone - player is checked
+        if selfCheck():
+            if hit[0]:
+                pieces[hit[1]][1] = targetX
+                pieces[hit[1]][2] = targetY
             chosenPiece[1] = x
             chosenPiece[2] = y
+            return False
 
-        # checks if an other piece is targeted
-        for piece in pieces:
-            if (piece[1]==targetX and piece[2]==targetY) and (piece[4][-3]!=chosenPiece[4][-3]):
-                # target is of the same color
-                if (name[-3]==piece[4][-3]):
-                    return False
-                else:
-                    piece[1] = -1
-                    piece[2] = -1
-                    piece[0].destroy()
-                break
+        # move doesnt get undone - finalize
+        if hit[0]:
+            pieces[hit[1]][0].destroy()
 
     return True
 
@@ -402,6 +435,10 @@ def validatePawn(pawn, targetX, targetY):
         return True
     # moving one field ahead
     elif (x==targetX and y-targetY==100):
+        # check if field is occupied
+        for piece in pieces:
+            if piece[1]==targetX and piece[2]==targetY:
+                return False
         return True
     # moving more then one field sidewards or only sidewards
     elif (max(x, targetX) - min(x, targetX) > 100) or y==targetY:
@@ -423,8 +460,84 @@ def isChecked(king, targetX, targetY):
         if piece[4][-3]!=color:
             if piece[4].startswith("pawn") and (targetY-piece[2]==100) and (max(targetX, piece[1])-min(targetX, piece[1])==100): # check if a pawn checks target field
                 return True
-            elif validateTurn(piece, targetX, targetY):
+            elif validateTurn(piece, targetX, targetY, test=True):
                 return True
+    return False
+
+# check (after valid turn) if opponent is check mate
+def isCheckMate():
+    global turn
+
+    if turn%2==0:
+        color = "green"
+    else:
+        color = "red"
+
+    king = "king_"+color
+
+    # save opp king pos
+    for piece in pieces:
+        if piece[4].endswith(king):
+            kingI = pieces.index(piece)
+            kingX = piece[1]
+            kingY = piece[2]
+            if not isChecked(piece, kingX, kingY):  # player not checked
+                return
+            break
+    
+    # player is checked - check if player can cheat the gallows with any turn
+    for piece in pieces:
+        if piece[4].endswith(color):
+            for field in fields:
+                if validateTurn(piece, field[1], field[2], test=True):
+                    # current piece could move to the field - check if player would remain checked
+                    saveX = piece[1]
+                    saveY = piece[2]
+                    piece[1] = field[1]
+                    piece[2] = field[2]
+                    if not isChecked(pieces[kingI], kingX, kingY): # player not checked anymore - no check mate
+                        # in any case the pos is set back, since its a test
+                        piece[1] = saveX
+                        piece[2] = saveY
+                        return
+                    piece[1] = saveX
+                    piece[2] = saveY
+
+    # player is check mate
+    checkMate()
+
+def checkMate():
+    global status
+    player = "green" if turn%2!=0 else "red"
+    message = "check mate\nplayer "+player+" wins."
+    print(message)
+    message = "check mate! player "+player+" wins"
+    setLabel(4, message)
+    status = 1
+    
+# checks if player is checked self after move 
+def selfCheck():
+    global turn
+
+    # reds turn
+    if turn%2==0:
+        color = "red"
+    else:
+        color = "green"
+
+    king = str("king_" + color)
+    for piece in pieces:
+        if piece[4].endswith(king):
+            kingX = piece[1]
+            kingY = piece[2]
+            break
+
+    for piece in pieces:
+        if not piece[4].endswith(color):
+            if validateTurn(piece, kingX, kingY, test=True):
+                # 
+                return True
+
     return False
 
 # switch the board for the next player
@@ -433,9 +546,10 @@ def switchBoard():
     turn += 1
     reevaluatePieces()
     try:
-        mBar.entryconfig(3, label = turn)
+        turnLabel = int((turn/2)+0.5)
+        setLabel(3, turnLabel)
     except:
-        print("not able to update turn label item on menu bar")
+        message=("error: not able to update turn label item on menu bar")
 
 # reevaluate position of pieces after each turn
 def reevaluatePieces():
@@ -487,17 +601,18 @@ mBar = tkinter.Menu(main)
 # makes objects for menu bar
 mFile = tkinter.Menu(mBar)
 mFile["tearoff"] = 0                    # menu not separable
-mFile.add_command(label="neu", command=switchBoard)
-mFile.add_command(label="laden", command=reevaluatePieces)
-mFile.add_command(label="speichern")
+mFile.add_command(label="new", command=switchBoard)
+mFile.add_command(label="pause/play", command=pause)
+mFile.add_command(label="save")
 mFile.add_separator()
-mFile.add_command(label="beenden", command=end)
+mFile.add_command(label="close", command=end)
 
-mBar.add_cascade(label="Datei", menu=mFile)
+mBar.add_cascade(label="options", menu=mFile)
 mView = tkinter.Menu(mBar)
 mView["tearoff"] = 0                    # menu not separable
 mBar.add_cascade(label="", menu=mView)  # time display generated empty, later updated with updateTime()
 mBar.add_cascade(label="1", menu=mView) # turn display, initialized with '1', later updatet with var turn
+mBar.add_cascade(label="", menu=mView)  # info display to update player on status
 
 # add menu bar to frame
 main["menu"] = mBar
