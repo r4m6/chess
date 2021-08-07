@@ -498,16 +498,30 @@ def isCheckMate():
         if piece[4].endswith(color):
             for field in fields:
                 if validateTurn(piece, field[1], field[2], test=True):
-                    # current piece could move to the field - check if player would remain checked
+                    # current piece could move to the field - test turn and reset pos later
                     saveX = piece[1]
                     saveY = piece[2]
                     piece[1] = field[1]
                     piece[2] = field[2]
+                    saveOpp = None
+                    # check if pos is already occupied by opp and remove opp temporary
+                    for opp in pieces:
+                        if not opp[4].endswith(color) and opp[1]==field[1] and opp[2]==field[2]:
+                            saveOpp = [pieces.index(opp), opp[1], opp[2], color]
+                            opp[1] = -1
+                            opp[2] = -1
+                    # check if player would remain checked
                     if not isChecked(pieces[kingI], kingX, kingY): # player not checked anymore - no check mate
                         # in any case the pos is set back, since its a test
                         piece[1] = saveX
                         piece[2] = saveY
+                        if saveOpp:
+                            pieces[saveOpp[0]][1] = saveOpp[1]
+                            pieces[saveOpp[0]][2] = saveOpp[2]
                         return
+                    if saveOpp:
+                        pieces[saveOpp[0]][1] = saveOpp[1]
+                        pieces[saveOpp[0]][2] = saveOpp[2]
                     piece[1] = saveX
                     piece[2] = saveY
 
@@ -527,7 +541,6 @@ def checkMate():
 def selfCheck():
     global turn
 
-    # reds turn
     if turn%2==0:
         color = "red"
     else:
