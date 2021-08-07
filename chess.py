@@ -208,7 +208,7 @@ def on_click(x, y, button, pressed):
             if toMove != -1:
                 pieces[toMove][5] = False
                 # make turn validation with the chosen piece, targetX and targetY
-                if validateTurn(pieces[toMove], x, y):
+                if validateTurn(pieces[toMove], x, y, test=False):
                     # move piece after validation
                     move(pieces[toMove], x, y)
                     fr.pack()
@@ -276,33 +276,41 @@ def validateTurn(chosenPiece, targetX, targetY, test=False):
             if piece[1]==targetX and piece[2]==targetY:
                 return False
 
-    if not test:
-        ## set position to target to test if player got checked, if not turn will be made, otherwise the position is going to be set back
-        chosenPiece[1] = targetX
-        chosenPiece[2] = targetY
+    ## set position to target to test if player got checked, if not turn will be made, otherwise the position is going to be set back
+    chosenPiece[1] = targetX
+    chosenPiece[2] = targetY
 
-        # checks if an other piece is targeted, same as chosenPiece - the piece first gets removed, but if the player remains checked, move will be undone
-        hit = [False, 0] 
-        for i in range(len(pieces)):
-            if (pieces[i][1]==targetX and pieces[i][2]==targetY) and (pieces[i][4][-3]!=chosenPiece[4][-3]):
-                if not (name[-3]==pieces[i][4][-3]):
-                    hit = [True, i]
-                    pieces[i][1] = -1
-                    pieces[i][2] = -1
-                    break
+    # checks if an other piece is targeted, same as chosenPiece - the piece first gets removed, but if the player remains checked, move will be undone
+    hit = [False, 0] 
+    for i in range(len(pieces)):
+        if (pieces[i][1]==targetX and pieces[i][2]==targetY) and (pieces[i][4][-3]!=chosenPiece[4][-3]):
+            if not (name[-3]==pieces[i][4][-3]):
+                hit = [True, i]
+                pieces[i][1] = -1
+                pieces[i][2] = -1
+                break
 
-        # move gets undone - player is checked
-        if selfCheck():
-            if hit[0]:
-                pieces[hit[1]][1] = targetX
-                pieces[hit[1]][2] = targetY
-            chosenPiece[1] = x
-            chosenPiece[2] = y
-            return False
-
-        # move doesnt get undone - finalize
+    # move gets undone - player is checked
+    if selfCheck():
         if hit[0]:
-            pieces[hit[1]][0].destroy()
+            pieces[hit[1]][1] = targetX
+            pieces[hit[1]][2] = targetY
+        chosenPiece[1] = x
+        chosenPiece[2] = y
+        return False
+
+    # move gets undone - it was just a valid test
+    if test:
+        if hit[0]:
+            pieces[hit[1]][1] = targetX
+            pieces[hit[1]][2] = targetY
+        chosenPiece[1] = x
+        chosenPiece[2] = y
+        return True
+
+    # move doesnt get undone - finalize
+    if hit[0]:
+        pieces[hit[1]][0].destroy()
 
     return True
 
@@ -535,7 +543,6 @@ def selfCheck():
     for piece in pieces:
         if not piece[4].endswith(color):
             if validateTurn(piece, kingX, kingY, test=True):
-                # 
                 return True
 
     return False
