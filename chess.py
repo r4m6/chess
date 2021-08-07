@@ -506,10 +506,11 @@ def isCheckMate():
                     saveOpp = None
                     # check if pos is already occupied by opp and remove opp temporary
                     for opp in pieces:
-                        if not opp[4].endswith(color) and opp[1]==field[1] and opp[2]==field[2]:
-                            saveOpp = [pieces.index(opp), opp[1], opp[2], color]
+                        if not opp[4].endswith(color) and opp[1]==field[1] and opp[2]==field[2] and not opp[4].startswith("king"):
+                            saveOpp = [pieces.index(opp), opp[1], opp[2]]
                             opp[1] = -1
-                            opp[2] = -1
+                            opp[2] = -1                            
+                            break
                     # check if player would remain checked
                     if not isChecked(pieces[kingI], kingX, kingY): # player not checked anymore - no check mate
                         # in any case the pos is set back, since its a test
