@@ -126,7 +126,7 @@ def initFields():
 def initPieces():
     pieces = [] # list to save label, position of pieces[piecenr][label, x, y, image, name, selected]
     colors = getColors()
-    path = ["art/tower_red.png", "art/horse_red.png", "art/bishop_red.png", "art/queen_red.png", "art/king_red.png", "art/bishop_red.png", "art/horse_red.png", "art/tower_red.png", "art/pawn_red.png"]
+    path = ["art/rook_red.png", "art/knight_red.png", "art/bishop_red.png", "art/queen_red.png", "art/king_red.png", "art/bishop_red.png", "art/knight_red.png", "art/rook_red.png", "art/pawn_red.png"]
     x = int(0)
     y = int(0)
 
@@ -183,6 +183,8 @@ def move(piece, x, y):
 
 ## MouseListener
 def on_click(x, y, button, pressed):
+    global isPromoting, popuplabel
+
     check = False
     try:
         check = isTopLevel()
@@ -195,6 +197,29 @@ def on_click(x, y, button, pressed):
     pos = getPos(x, y)
     x = pos[0]
     y = pos[1]
+
+    if isPromoting:
+        for popup in popuplabel:
+            if popup[1]==x and popup[2]==y:
+                # promote pawn
+                path = popup[3]
+                image = tkinter.PhotoImage(file=path) 
+                lb = tkinter.Label(main, image=image, relief="ridge", bd=1, bg="#123456")
+                lb.image = image
+                lb.place(x=pieces[popup[4]][1], y=0, anchor="nw")
+                pieces[popup[4]][0] = lb
+                pieces[popup[4]][3] = image
+                pieces[popup[4]][4] = path.replace("art/", "").replace(".png", "")
+                isPromoting = False
+                # end turn
+                move(pieces[popup[4]], popup[5], 0)
+                isCheckMate("red" if pieces[popup[4]][4][-3]=="e" else "green")
+                turnTable()
+                fr.pack()
+            popup[0].destroy()
+        popuplabel = []
+        return
+
     if pressed:         # mouse pressed
         for i in range(len(pieces)):
             if (pieces[i][1]==x and pieces[i][2]==y):   # checks if a piece got selected by the player
@@ -208,13 +233,18 @@ def on_click(x, y, button, pressed):
             pieces[toMove][5] = False
             # make turn validation with the chosen piece, targetX and targetY
             if validateTurn(pieces[toMove], x, y, test=False):
+                # check if a pawn promoted
+                if pieces[toMove][4].startswith("pawn") and y==0:
+                    promotePawn(pieces[toMove], x)
+                    isPromoting = True
+                    return
                 # move piece after validation
                 move(pieces[toMove], x, y)
-                fr.pack()
                 # is check mate?
-                isCheckMate()
+                isCheckMate("red" if pieces[toMove][4][-3]=="e" else "green")
                 # turn table for next player
                 turnTable()
+                fr.pack()
 
 # checks if chess frame is on top level
 def isTopLevel():
@@ -230,34 +260,35 @@ def isTopLevel():
 # validate turn
 def validateTurn(chosenPiece, targetX, targetY, test=False):
     name = str(chosenPiece[4])
+    color = "green" if name.endswith("green") else "red"
     x = int(chosenPiece[1])
     y = int(chosenPiece[2])
 
     # check if the piece chosen belongs to the player at turn
-    if turn%2==0 and name.endswith("green") and not test:
+    if turn%2==0 and color=="green" and not test:
         return False
-    elif turn%2!=0 and name.endswith("red") and not test:
+    elif turn%2!=0 and color=="red" and not test:
         return False
 
     # no move made, return
     if x==targetX and y==targetY:
         return False
 
-    # tower selected
-    if name.startswith("tower"):
-        if not validateTower(chosenPiece, targetX, targetY):
+    # rook selected
+    if name.startswith("rook"):
+        if not validateRook(chosenPiece, targetX, targetY):
             return False
     # bishop selected     
     elif name.startswith("bishop"):
         if not validateBishop(chosenPiece, targetX, targetY):
             return False
-    # horse selected
-    elif name.startswith("horse"):
-        if not validateHorse(chosenPiece, targetX, targetY):
+    # knight selected
+    elif name.startswith("knight"):
+        if not validateKnight(chosenPiece, targetX, targetY):
             return False
     # queen selected
     elif name.startswith("queen"):
-        if not (validateTower(chosenPiece, targetX, targetY) \
+        if not (validateRook(chosenPiece, targetX, targetY) \
                 or validateBishop(chosenPiece, targetX, targetY)):
             return False
     # king selected
@@ -271,51 +302,77 @@ def validateTurn(chosenPiece, targetX, targetY, test=False):
 
     # check if ally is already at position
     for piece in pieces:
-        if piece[4][-3]==name[-3]:
+        if piece[4].endswith(color):
             if piece[1]==targetX and piece[2]==targetY:
                 return False
 
-    ## set position to target to test if player got checked, if not turn will be made, otherwise the position is going to be set back
-    chosenPiece[1] = targetX
-    chosenPiece[2] = targetY
-
-    # checks if an other piece is targeted, same as chosenPiece - the piece first gets removed, but if the player remains checked, move will be undone
+    # checks if an other piece is targeted - the piece first gets removed, but if the player remains checked, move will be undone
     hit = [False, 0] 
-    for i in range(len(pieces)):
-        if (pieces[i][1]==targetX and pieces[i][2]==targetY) and (pieces[i][4][-3]!=name[-3]):
-            hit = [True, i]
-            pieces[i][1] = -1
-            pieces[i][2] = -1
+    for piece in pieces:
+        if (piece[1]==targetX and piece[2]==targetY) and not piece[4].endswith(color):
+            hit = [True, pieces.index(piece)]
+            piece[1] = -1
+            piece[2] = -1
             break
 
+    chosenPiece[1] = targetX    # set position to target, to check if player would be checked after turn
+    chosenPiece[2] = targetY
     # move gets undone - player is checked
-    if selfCheck():
+    if isChecked(color):
+        chosenPiece[1] = x
+        chosenPiece[2] = y
         if hit[0]:
             pieces[hit[1]][1] = targetX
             pieces[hit[1]][2] = targetY
+        return False
+    # check if only valid because other player got checked
+    else:
+        # remove opp king to check if player would remain checked
+        # without a king, opp cant be checked and not cause a negation of player being checked 
+        color = "green" if color=="red" else "red" 
+        king = str("king_"+color)
+        for piece in pieces:
+            if piece[4].endswith(king):
+                kingIXY = [
+                    pieces.index(piece),
+                    piece[1],
+                    piece[2]
+                ]
+                piece[1] = -1
+                piece[2] = -1
+                break
+        color = "green" if color=="red" else "red" 
+        # check if remained checked
+        if isChecked(color):
+            pieces[kingIXY[0]][1] = kingIXY[1] # reset
+            pieces[kingIXY[0]][2] = kingIXY[2]
+            chosenPiece[1] = x
+            chosenPiece[2] = y
+            if hit[0]:
+                pieces[hit[1]][1] = targetX
+                pieces[hit[1]][2] = targetY
+            return False
+        pieces[kingIXY[0]][1] = kingIXY[1]  # reset
+        pieces[kingIXY[0]][2] = kingIXY[2]
         chosenPiece[1] = x
         chosenPiece[2] = y
-        return False
 
     # move gets undone - it was just a valid test
     if test:
         if hit[0]:
             pieces[hit[1]][1] = targetX
             pieces[hit[1]][2] = targetY
-        chosenPiece[1] = x
-        chosenPiece[2] = y
-        return True
-
     # move doesnt get undone - finalize
-    if hit[0]:
-        pieces[hit[1]][0].destroy()
+    else:
+        if hit[0]:                                  # destroy if a piece was hit
+            pieces[hit[1]][0].destroy()            
 
     return True
 
-def validateTower(tower, targetX, targetY):
-    x = tower[1]
-    y = tower[2]
-    # tower moving on y axis
+def validateRook(rook, targetX, targetY):
+    x = rook[1]
+    y = rook[2]
+    # rook moving on y axis
     if (x==targetX and y!=targetY):
         # moving up 
         if (y > targetY):
@@ -329,7 +386,7 @@ def validateTower(tower, targetX, targetY):
                 # check if other piece is in between
                 if (piece[2] > y) and (piece[2] < targetY) and (piece[1] == x):
                     return False
-    # tower moving on x axis
+    # rook moving on x axis
     elif (x!=targetX and y==targetY):
         # moving left 
         if (x > targetX):
@@ -343,7 +400,7 @@ def validateTower(tower, targetX, targetY):
                 # check if other piece is in between
                 if (piece[1] > x) and (piece[1] < targetX) and (piece[2] == y):
                     return False
-    # tower moving invalid
+    # rook moving invalid
     else:
         return False
     
@@ -400,10 +457,10 @@ def validateBishop(bishop, targetX, targetY):
     
     return True
 
-def validateHorse(horse, targetX, targetY):
-    x = horse[1]
-    y = horse[2]
-    # check if horse is moving valid
+def validateKnight(knight, targetX, targetY):
+    x = knight[1]
+    y = knight[2]
+    # check if knight is moving valid
     if (targetX == x+200 or targetX == x-200) and (targetY == y+100 or targetY == y-100) \
         or (targetY == y+200 or targetY == y-200) and ((targetX == x+100) or (targetX == x-100)):
         return True
@@ -412,13 +469,14 @@ def validateHorse(horse, targetX, targetY):
         return False
 
 def validateKing(king, targetX, targetY):
+    color = "green" if king[4].endswith("green") else "red"
     x = king[1]
     y = king[2]
     # check if moving only 1 field
     if (max(x, targetX) - min(x, targetX) <= 100) \
         and (max(y, targetY) - min(y, targetY) <= 100):
         # check if target field is checked by opponent
-        if isChecked(king, targetX, targetY):
+        if isChecked(color, targetX, targetY):
             return False
         else:
             return True
@@ -427,117 +485,113 @@ def validateKing(king, targetX, targetY):
         return False
 
 def validatePawn(pawn, targetX, targetY):
+    global turn
+    # check whos turn it is (if opps turn f.e. checking if pawn checks king - table is turned and other rules apply)
+    color = "green" if turn%2!=0 else "red"
     x = pawn[1]
     y = pawn[2]
-    # moving backwards or more then two fields ahead
-    if (y-targetY > 200 or y-targetY < 0):
-        return False
-    # moving two fields ahead, from start position
-    elif (x==targetX and y-targetY==200 and y==600):
-        # check if piece blocks the way
-        for piece in pieces:
-            if piece[1]==x and (piece[2]==targetY or piece[2]==targetY+100):
-                return False
-        return True
-    # moving one field ahead
-    elif (x==targetX and y-targetY==100):
-        # check if field is occupied
-        for piece in pieces:
-            if piece[1]==targetX and piece[2]==targetY:
-                return False
-        return True
-    # moving more then one field sidewards or only sidewards
-    elif (max(x, targetX) - min(x, targetX) > 100) or y==targetY:
-        return False        
-    # check if opponent is at target pos if moving diagonal
-    elif x!=targetX and y-targetY==100:
-        for piece in pieces:
-            if piece[1]==targetX and piece[2]==targetY and piece[4][-3]!=pawn[4][-3]:
-                return True
-        return False
+    if pawn[4].endswith(color):
+        # moving backwards or more then two fields ahead or not at all
+        if (y-targetY > 200 or y-targetY < 0 or y==targetY):
+            return False
+        # moving two fields ahead, from start position
+        elif (x==targetX and y-targetY==200 and y==600):
+            # check if piece blocks the way
+            for piece in pieces:
+                if piece[1]==x and (piece[2]==targetY or piece[2]==targetY+100):
+                    return False
+            return True
+        # moving one field ahead
+        elif (x==targetX and y-targetY==100):
+            # check if field is occupied
+            for piece in pieces:
+                if piece[1]==targetX and piece[2]==targetY:
+                    return False
+            return True
+        # moving more then one field sidewards or only sidewards
+        elif (max(x, targetX) - min(x, targetX) > 100) or y==targetY:
+            return False        
+        # check if opponent is at target pos if moving diagonal
+        elif x!=targetX and y-targetY==100:
+            for piece in pieces:
+                if piece[1]==targetX and piece[2]==targetY and piece[4][-3]!=pawn[4][-3]:
+                    return True
+            return False
+    else:   
+        # check if opponent is at target pos if moving diagonal
+        if (max(targetX, x)-min(targetX, x))==100 and targetY-y==100:
+            for piece in pieces:
+                if piece[1]==targetX and piece[2]==targetY and piece[4][-3]!=pawn[4][-3]:
+                    return True
+            return False
 
     return False
 
+def promotePawn(pawn, targetX):
+    global popuplabel
+
+    x = pawn[1]-100 if pawn[1]>=100 and pawn[1]<=500 else 200
+    color = "green" if pawn[4].endswith("green") else "red"
+    names = [
+        "bishop",
+        "knight",
+        "queen",
+        "rook"
+    ]
+    
+    for name in names:
+        path = "art/"+name+"_"+color+".png"
+        image = tkinter.PhotoImage(file=path) 
+        lb = tkinter.Label(main, image=image, relief="ridge", bd=1, bg="#123456")
+        lb.image = image
+        lb.place(x=x, y=0, anchor="nw")
+        popuplabel.append([lb, x, 0, path, pieces.index(pawn), targetX])   # label, x, y, path, promotingPawnIndex, targetX
+        x+=100
+    
 # check if a field is checked by the opponent
-def isChecked(king, targetX, targetY):
-    # color = 3. char backwards = [-3]
-    color = king[4][-3]
+def isChecked(color, targetX=-1, targetY=-1):
+    # if called without positional params, target is current king
+    if targetX==-1:
+        king = str("king_"+color)
+        for piece in pieces:
+            if piece[4].endswith(king):
+                targetX = piece[1]
+                targetY = piece[2]
+    
+    # check if opp is able to attack target
     for piece in pieces:
-        if piece[4][-3]!=color:
-            if piece[4].startswith("pawn") and (targetY-piece[2]==100) and (max(targetX, piece[1])-min(targetX, piece[1])==100):    # check if a pawn checks target field
-                return True
-            elif validateTurn(piece, targetX, targetY, test=True):                                                                  # check if opp could move to target
-                return True
-            elif piece[1]==targetX and piece[2]==targetY:                                                                           # opp is at target - check if other piece is defending
-                piece[1]=-1
-                piece[2]=-1
-                for opp in pieces:
-                    if opp!=piece and opp[4][-3]==piece[4][-3]:
-                        if validateTurn(opp, targetX, targetY, test=True):
-                            piece[1]=targetX
-                            piece[2]=targetY
-                            return True
-                piece[1]=targetX
-                piece[2]=targetY
+        if not piece[4].endswith(color):
+            if validateTurn(piece, targetX, targetY, test=True):
+                return True   
+
     return False
 
 # check (after valid turn) if opponent is check mate
-def isCheckMate():
-    global turn
+def isCheckMate(color):
+    # player not checked - return
+    if not isChecked(color):
+        return
 
-    if turn%2==0:
-        color = "green"
-    else:
-        color = "red"
-
-    king = "king_"+color
-
-    # save opp king pos
-    for piece in pieces:
-        if piece[4].endswith(king):
-            kingI = pieces.index(piece)
-            kingX = piece[1]
-            kingY = piece[2]
-            if not isChecked(piece, kingX, kingY):  # player not checked
-                return
-            break
-    
-    # player is checked - check if player can cheat the gallows with any turn
+    # player is checked - check if player is able to cheat the gallows with any valid turn
     for piece in pieces:
         if piece[4].endswith(color):
             for field in fields:
                 if validateTurn(piece, field[1], field[2], test=True):
-                    # current piece could move to the field - test turn and reset pos later
-                    saveX = piece[1]
-                    saveY = piece[2]
+                    saveXY = [piece[1], piece[2]]
                     piece[1] = field[1]
                     piece[2] = field[2]
-                    saveOpp = None
-                    # check if pos is already occupied by opp and remove opp temporary
-                    for opp in pieces:
-                        if not opp[4].endswith(color) and opp[1]==field[1] and opp[2]==field[2]:
-                            saveOpp = [pieces.index(opp), opp[1], opp[2]]
-                            opp[1] = -1
-                            opp[2] = -1                            
-                            break
-                    # check if player would remain checked
-                    if not isChecked(pieces[kingI], kingX, kingY): # player not checked anymore - no check mate
-                        # in any case the pos is set back, since its a test
-                        piece[1] = saveX
-                        piece[2] = saveY
-                        if saveOpp:
-                            pieces[saveOpp[0]][1] = saveOpp[1]
-                            pieces[saveOpp[0]][2] = saveOpp[2]
+                    # player not checked anymore
+                    if not isChecked(color):
+                        piece[1] = saveXY[0]
+                        piece[2] = saveXY[1]
                         return
-                    if saveOpp:
-                        pieces[saveOpp[0]][1] = saveOpp[1]
-                        pieces[saveOpp[0]][2] = saveOpp[2]
-                    piece[1] = saveX
-                    piece[2] = saveY
+                    piece[1] = saveXY[0]
+                    piece[2] = saveXY[1]
 
     # player is check mate
     checkMate()
 
+# check mate - pause game and display winner
 def checkMate():
     global status
     player = "green" if turn%2!=0 else "red"
@@ -546,29 +600,6 @@ def checkMate():
     message = "check mate! player "+player+" wins"
     setLabel(4, message)
     status = 1
-    
-# checks if player is checked self after move 
-def selfCheck():
-    global turn
-
-    if turn%2==0:
-        color = "red"
-    else:
-        color = "green"
-
-    king = str("king_" + color)
-    for piece in pieces:
-        if piece[4].endswith(king):
-            kingX = piece[1]
-            kingY = piece[2]
-            break
-
-    for piece in pieces:
-        if not piece[4].endswith(color):
-            if validateTurn(piece, kingX, kingY, test=True):
-                return True
-
-    return False
 
 # switch the board for the next player
 def turnTable():
@@ -651,9 +682,11 @@ main["menu"] = mBar
 ## start game preparation
 # chess board gets prepared... fields[i][label, x, y, color]
 fields = initFields()
-# pieces get prepared... pieces[i][label(Label im Frame), x, y, image(gerendertes Bild), name(Figurname), selected(gerade ausgewählt?)] 
+# pieces get prepared... pieces[i][label(in frame), x, y, image(rendered image), name(name of piece), selected(currently selected?)] 
 pieces = initPieces()
 turn = 1
+isPromoting = False     # is a pawn promoting?
+popuplabel = []         # to save (and destroy) labels for pawn promotion
 ## end game preparation
 ##############################################################################################################################################################################################
 
