@@ -189,33 +189,32 @@ def on_click(x, y, button, pressed):
     except:
         return
 
-    if status==0 or status==1:
+    if not status==2 or not check:
         return
 
-    if check:
-        pos = getPos(x, y)
-        x = pos[0]
-        y = pos[1]
-        if pressed:         # mouse pressed
-            for i in range(len(pieces)):
-                if (pieces[i][1]==x and pieces[i][2]==y):   # checks if a piece got selected by the player
-                    pieces[i][5] = True                     # piece[5] = 'selected', a boolean property to determine if the piece is selected
-        else:               # mouse released
-            toMove = -1
-            for i in range(len(pieces)):
-                if pieces[i][5]==True:
-                    toMove = i
-            if toMove != -1:
-                pieces[toMove][5] = False
-                # make turn validation with the chosen piece, targetX and targetY
-                if validateTurn(pieces[toMove], x, y, test=False):
-                    # move piece after validation
-                    move(pieces[toMove], x, y)
-                    fr.pack()
-                    # is check mate?
-                    isCheckMate()
-                    # switch board for next player
-                    switchBoard()
+    pos = getPos(x, y)
+    x = pos[0]
+    y = pos[1]
+    if pressed:         # mouse pressed
+        for i in range(len(pieces)):
+            if (pieces[i][1]==x and pieces[i][2]==y):   # checks if a piece got selected by the player
+                pieces[i][5] = True                     # piece[5] = 'selected', a boolean property to determine if the piece is selected
+    else:               # mouse released
+        toMove = -1
+        for i in range(len(pieces)):
+            if pieces[i][5]==True:
+                toMove = i
+        if toMove != -1:
+            pieces[toMove][5] = False
+            # make turn validation with the chosen piece, targetX and targetY
+            if validateTurn(pieces[toMove], x, y, test=False):
+                # move piece after validation
+                move(pieces[toMove], x, y)
+                fr.pack()
+                # is check mate?
+                isCheckMate()
+                # turn table for next player
+                turnTable()
 
 # checks if chess frame is on top level
 def isTopLevel():
@@ -283,12 +282,11 @@ def validateTurn(chosenPiece, targetX, targetY, test=False):
     # checks if an other piece is targeted, same as chosenPiece - the piece first gets removed, but if the player remains checked, move will be undone
     hit = [False, 0] 
     for i in range(len(pieces)):
-        if (pieces[i][1]==targetX and pieces[i][2]==targetY) and (pieces[i][4][-3]!=chosenPiece[4][-3]):
-            if not (name[-3]==pieces[i][4][-3]):
-                hit = [True, i]
-                pieces[i][1] = -1
-                pieces[i][2] = -1
-                break
+        if (pieces[i][1]==targetX and pieces[i][2]==targetY) and (pieces[i][4][-3]!=name[-3]):
+            hit = [True, i]
+            pieces[i][1] = -1
+            pieces[i][2] = -1
+            break
 
     # move gets undone - player is checked
     if selfCheck():
@@ -466,10 +464,21 @@ def isChecked(king, targetX, targetY):
     color = king[4][-3]
     for piece in pieces:
         if piece[4][-3]!=color:
-            if piece[4].startswith("pawn") and (targetY-piece[2]==100) and (max(targetX, piece[1])-min(targetX, piece[1])==100): # check if a pawn checks target field
+            if piece[4].startswith("pawn") and (targetY-piece[2]==100) and (max(targetX, piece[1])-min(targetX, piece[1])==100):    # check if a pawn checks target field
                 return True
-            elif validateTurn(piece, targetX, targetY, test=True):
+            elif validateTurn(piece, targetX, targetY, test=True):                                                                  # check if opp could move to target
                 return True
+            elif piece[1]==targetX and piece[2]==targetY:                                                                           # opp is at target - check if other piece is defending
+                piece[1]=-1
+                piece[2]=-1
+                for opp in pieces:
+                    if opp!=piece and opp[4][-3]==piece[4][-3]:
+                        if validateTurn(opp, targetX, targetY, test=True):
+                            piece[1]=targetX
+                            piece[2]=targetY
+                            return True
+                piece[1]=targetX
+                piece[2]=targetY
     return False
 
 # check (after valid turn) if opponent is check mate
@@ -506,7 +515,7 @@ def isCheckMate():
                     saveOpp = None
                     # check if pos is already occupied by opp and remove opp temporary
                     for opp in pieces:
-                        if not opp[4].endswith(color) and opp[1]==field[1] and opp[2]==field[2] and not opp[4].startswith("king"):
+                        if not opp[4].endswith(color) and opp[1]==field[1] and opp[2]==field[2]:
                             saveOpp = [pieces.index(opp), opp[1], opp[2]]
                             opp[1] = -1
                             opp[2] = -1                            
@@ -562,7 +571,7 @@ def selfCheck():
     return False
 
 # switch the board for the next player
-def switchBoard():
+def turnTable():
     global turn
     turn += 1
     reevaluatePieces()
@@ -622,7 +631,7 @@ mBar = tkinter.Menu(main)
 # makes objects for menu bar
 mFile = tkinter.Menu(mBar)
 mFile["tearoff"] = 0                    # menu not separable
-mFile.add_command(label="new", command=switchBoard)
+mFile.add_command(label="new", command=turnTable)
 mFile.add_command(label="pause/play", command=pause)
 mFile.add_command(label="save")
 mFile.add_separator()
