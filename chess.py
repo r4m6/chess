@@ -38,7 +38,6 @@ def updateTime():
     while threading.main_thread().is_alive():
         # status[0:exit, 1:paused, 2:play]
         if status == 2:
-            setLabel(4, "player greens turn" if turn%2!=0 else "player reds turn")
             time.sleep(1)
             seconds += 1
             if seconds == 60:
@@ -49,8 +48,7 @@ def updateTime():
                         + "{:0>2}".format(seconds))
             setLabel(2, timeStr)
         elif status==1:
-            if not getLabel(4).endswith("wins"):
-                setLabel(4, "paused")
+            return
         elif status == 0:
             return        
 
@@ -61,7 +59,12 @@ def pause():
             return
     except:
         return
-    status = 1 if status==2 else 2
+     
+    if status==2:
+        status = 1
+        setLabel(4, "paused")
+    else:
+        status = 2
 
 def getColors():
     # sets colors[][] for bgColor //yeah dirty here
@@ -183,7 +186,7 @@ def move(piece, x, y):
 
 ## MouseListener
 def on_click(x, y, button, pressed):
-    global isPromoting, popuplabel
+    global isPromoting, popuplabel, pgn
 
     check = False
     try:
@@ -201,6 +204,9 @@ def on_click(x, y, button, pressed):
     if isPromoting:
         for popup in popuplabel:
             if popup[1]==x and popup[2]==y:
+                appendPgn(
+                    getPgn(pieces[popup[4]], popup[5], 0).replace(" ", "") + "="
+                    )
                 # promote pawn
                 path = popup[3]
                 image = tkinter.PhotoImage(file=path) 
@@ -213,6 +219,7 @@ def on_click(x, y, button, pressed):
                 isPromoting = False
                 # end turn
                 move(pieces[popup[4]], popup[5], 0)
+                appendPgn(getPgn(pieces[popup[4]]))
                 isCheckMate("red" if pieces[popup[4]][4][-3]=="e" else "green")
                 turnTable()
                 fr.pack()
@@ -240,8 +247,18 @@ def on_click(x, y, button, pressed):
                     return
                 # move piece after validation
                 move(pieces[toMove], x, y)
+                turnpgndata = getPgn(pieces[toMove], x, y)
+                appendPgn(turnpgndata)
+                oppcolor = "red" if pieces[toMove][4][-3]=="e" else "green"
                 # is check mate?
-                isCheckMate("red" if pieces[toMove][4][-3]=="e" else "green")
+                isCheckMate(oppcolor)
+                # is checked?
+                if "#" not in pgn:
+                    if isChecked(oppcolor):
+                        appendPgn("+")
+                        setLabel(4, ("player " + oppcolor + " checked!"))
+                    else:
+                        setLabel(4, ("player " + oppcolor + "s turn"))
                 # turn table for next player
                 turnTable()
                 fr.pack()
@@ -593,13 +610,18 @@ def isCheckMate(color):
 
 # check mate - pause game and display winner
 def checkMate():
-    global status
+    global status, pgn
+    appendPgn("#")
     player = "green" if turn%2!=0 else "red"
+    if player=="green":
+        pgn = pgn.replace("0-0", "1-0")
+    else:
+        pgn = pgn.replace("0-0", "0-1")
     message = "check mate\nplayer "+player+" wins."
-    print(message)
     message = "check mate! player "+player+" wins"
     setLabel(4, message)
     status = 1
+    writePgn()
 
 # switch the board for the next player
 def turnTable():
@@ -644,6 +666,86 @@ def reevaluatePieces():
             lb.place(x=piece[1], y=piece[2], anchor="nw")
             piece[0] = lb
 
+# appends .pgn data for each turn
+def appendPgn(data):
+    global pgn
+    try:
+        if data == "":
+            date = time.localtime()[0:3]
+            date = str(date[0]) + "." + "{:0>2}".format(date[1]) + "." + "{:0>2}".format(date[2])
+            pgn = ""                                +  \
+                "[Event \"open source chess\"]\n"             +  \
+                "[Site \"www.github.com/r4m6/chess\"]\n"                  +  \
+                "[Date \"" + str(date) + "\"]\n"           +  \
+                "[Round \"?\"]\n"                   +  \
+                "[White \"player green\"]\n"+  \
+                "[Black \"player red\"]\n"       +  \
+                "[Result \"0-0\"]\n\n"
+            return pgn                           
+        else:
+            pgn += str(data)
+            i = 0
+            for char in pgn:
+                if char == "\n":
+                    i = 0
+                    continue
+                else:
+                    i += 1
+                if i == 50:
+                    search = str(int((turn/2)+0.5)) + "."
+                    replacement = "\n" + str(int((turn/2)+0.5)) + "."
+                    pgn = pgn.replace(search, replacement)
+                    break
+    except:
+        print("not able to collect .pgn data")
+
+# return a string for the turn made, to collect .pgn data
+def getPgn(piece, targetX=None, targetY=None):
+    global turn
+    turndata        = ""
+    rows            = ["a", "b", "c", "d", "e", "f", "g", "h"]
+    columns         = ["1", "2", "3", "4", "5", "6", "7", "8"]
+    
+    if not piece[4].startswith("pawn"):
+        if piece[4].startswith("king"):
+            turndata += "K"
+        elif piece[4].startswith("queen"): 
+            turndata += "Q"
+        elif piece[4].startswith("rook"):
+            turndata += "R"
+        elif piece[4].startswith("knight"):
+            turndata += "N"
+        elif piece[4].startswith("bishop"):
+            turndata += "B"
+    
+    if targetX == None:
+        return turndata
+    else:
+        if piece[4].endswith("green"):
+            turndata = str(int((turn/2)+0.5)) + "." + turndata
+
+    for i in range(0, 8, 1):
+        if targetX == i*100:
+            if piece[4].endswith("green"):
+                turndata += rows[i]
+            else:
+                turndata += rows[7-i]
+            continue
+
+    for i in range(0, 8, 1):
+        if targetY == i*100:
+            if piece[4].endswith("red"):
+                turndata += columns[i] + " "
+            else:
+                turndata += columns[7-i] + " "
+            continue
+
+    return turndata
+
+# write a .pgn file with the current portable game notations
+def writePgn():
+    global pgn
+
 # start listener
 listener = mouse.Listener(on_click=on_click)
 listener.start()
@@ -687,6 +789,7 @@ pieces = initPieces()
 turn = 1
 isPromoting = False     # is a pawn promoting?
 popuplabel = []         # to save (and destroy) labels for pawn promotion
+pgn = str(appendPgn(""))# to append .pgn data
 ## end game preparation
 ##############################################################################################################################################################################################
 
