@@ -7,6 +7,7 @@
 import threading
 import time
 import tkinter
+import os.path
 from pynput import mouse, keyboard
 
 # destroys frame
@@ -205,7 +206,7 @@ def on_click(x, y, button, pressed):
         for popup in popuplabel:
             if popup[1]==x and popup[2]==y:
                 appendPgn(
-                    getPgn(pieces[popup[4]], popup[5], 0).replace(" ", "") + "="
+                    getTurnPgn(pieces[popup[4]], popup[5], 0).replace(" ", "") + "="
                     )
                 # promote pawn
                 path = popup[3]
@@ -219,7 +220,7 @@ def on_click(x, y, button, pressed):
                 isPromoting = False
                 # end turn
                 move(pieces[popup[4]], popup[5], 0)
-                appendPgn(getPgn(pieces[popup[4]]))
+                appendPgn(getTurnPgn(pieces[popup[4]]))
                 isCheckMate("red" if pieces[popup[4]][4][-3]=="e" else "green")
                 turnTable()
                 fr.pack()
@@ -247,7 +248,7 @@ def on_click(x, y, button, pressed):
                     return
                 # move piece after validation
                 move(pieces[toMove], x, y)
-                turnpgndata = getPgn(pieces[toMove], x, y)
+                turnpgndata = getTurnPgn(pieces[toMove], x, y)
                 appendPgn(turnpgndata)
                 oppcolor = "red" if pieces[toMove][4][-3]=="e" else "green"
                 # is check mate?
@@ -621,7 +622,7 @@ def checkMate():
     message = "check mate! player "+player+" wins"
     setLabel(4, message)
     status = 1
-    writePgn()
+    savePgn()
 
 # switch the board for the next player
 def turnTable():
@@ -700,7 +701,7 @@ def appendPgn(data):
         print("not able to collect .pgn data")
 
 # return a string for the turn made, to collect .pgn data
-def getPgn(piece, targetX=None, targetY=None):
+def getTurnPgn(piece, targetX=None, targetY=None):
     global turn
     turndata        = ""
     rows            = ["a", "b", "c", "d", "e", "f", "g", "h"]
@@ -742,9 +743,29 @@ def getPgn(piece, targetX=None, targetY=None):
 
     return turndata
 
-# write a .pgn file with the current portable game notations
-def writePgn():
+# save current pgn data to pgndata/chessyyyy-mm-dd-nr.pgn
+def savePgn():
     global pgn
+
+    date = time.localtime()[0:3]
+    date = str(date[0]) + "-" + "{:0>2}".format(date[1]) + "-" + "{:0>2}".format(date[2])
+    fpath = "pgndata/chess" + date + ".pgn"
+
+    # set file counter if path was occupied
+    counter = 1
+    
+    while os.path.exists(fpath):
+        if len(fpath) == 27:
+            fpath = fpath.replace(".pgn", "") + "-" + "{:0>2}".format(counter) + ".pgn"
+        else:
+            fpath = fpath.rsplit("{:0>2}".format(counter), 1)
+            fpath = "{:0>2}".format(counter+1).join(fpath)
+            print(fpath)
+            counter += 1
+        
+    file = open(fpath, "a")
+    file.write(pgn)
+    file.close()
 
 # start listener
 listener = mouse.Listener(on_click=on_click)
@@ -766,7 +787,7 @@ mFile = tkinter.Menu(mBar)
 mFile["tearoff"] = 0                    # menu not separable
 mFile.add_command(label="new", command=turnTable)
 mFile.add_command(label="pause/play", command=pause)
-mFile.add_command(label="save")
+mFile.add_command(label="save pgn", command=savePgn)
 mFile.add_separator()
 mFile.add_command(label="close", command=end)
 

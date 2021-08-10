@@ -1,0 +1,9 @@
+[Event "open source chess"]
+[Site "www.github.com/r4m6/chess"]
+[Date "2021.08.10"]
+[Round "?"]
+[White "player green"]
+[Black "player red"]
+[Result "0-0"]
+
+1.e4 d5 
