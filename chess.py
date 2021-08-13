@@ -9,9 +9,12 @@ import time
 import tkinter
 import os.path
 from pynput import mouse, keyboard
+import re
 
 # destroys frame
 def end():
+    global pgn
+    print(pgn)
     main.destroy()   
 
 # updates a label in menu bar - i = nth element in menubar, str = string to insert
@@ -277,10 +280,17 @@ def isTopLevel():
 
 # validate turn
 def validateTurn(chosenPiece, targetX, targetY, test=False):
+    global enPassant
+
     name = str(chosenPiece[4])
     color = "green" if name.endswith("green") else "red"
     x = int(chosenPiece[1])
     y = int(chosenPiece[2])
+
+    # reset en passant 
+    if enPassant[0] and enPassant[3]==color and not test:
+        print("enPassant not active")
+        enPassant[0] = False
 
     # check if the piece chosen belongs to the player at turn
     if turn%2==0 and color=="green" and not test:
@@ -503,7 +513,8 @@ def validateKing(king, targetX, targetY):
         return False
 
 def validatePawn(pawn, targetX, targetY):
-    global turn
+    global turn, enPassant
+
     # check whos turn it is (if opps turn f.e. checking if pawn checks king - table is turned and other rules apply)
     color = "green" if turn%2!=0 else "red"
     x = pawn[1]
@@ -518,6 +529,8 @@ def validatePawn(pawn, targetX, targetY):
             for piece in pieces:
                 if piece[1]==x and (piece[2]==targetY or piece[2]==targetY+100):
                     return False
+            # mark en passant field
+            enPassant = [True, 700-targetX, 600-targetY, color]
             return True
         # moving one field ahead
         elif (x==targetX and y-targetY==100):
@@ -529,11 +542,28 @@ def validatePawn(pawn, targetX, targetY):
         # moving more then one field sidewards or only sidewards
         elif (max(x, targetX) - min(x, targetX) > 100) or y==targetY:
             return False        
-        # check if opponent is at target pos if moving diagonal
+        # moving diagonal
         elif x!=targetX and y-targetY==100:
+            # check if opponent is at target pos  
             for piece in pieces:
                 if piece[1]==targetX and piece[2]==targetY and piece[4][-3]!=pawn[4][-3]:
                     return True
+            # check if its a possible en passant
+            if enPassant[0] and enPassant[1]==targetX and enPassant[2]==targetY:
+                print("enPassant done")
+                # remove opp piece (and destroy if not checked yourself)
+                for piece in pieces:
+                    if piece[1]==targetX and piece[2]==targetY+100:
+                        saveIXY = [pieces.index(piece), piece[1], piece[2]]
+                        piece[1] = -1
+                        piece[2] = -1
+                        if isChecked(color):
+                            pieces[saveIXY[0]][1] = saveIXY[1]
+                            pieces[saveIXY[0]][2] = saveIXY[2]
+                            return False
+                        else:
+                            pieces[saveIXY[0]][0].destroy()
+                return True
             return False
     else:   
         # check if opponent is at target pos if moving diagonal
@@ -785,7 +815,7 @@ mBar = tkinter.Menu(main)
 # makes objects for menu bar
 mFile = tkinter.Menu(mBar)
 mFile["tearoff"] = 0                    # menu not separable
-mFile.add_command(label="new", command=turnTable)
+mFile.add_command(label="new", command=None)
 mFile.add_command(label="pause/play", command=pause)
 mFile.add_command(label="save pgn", command=savePgn)
 mFile.add_separator()
@@ -808,6 +838,7 @@ fields = initFields()
 # pieces get prepared... pieces[i][label(in frame), x, y, image(rendered image), name(name of piece), selected(currently selected?)] 
 pieces = initPieces()
 turn = 1
+enPassant = [False, -1, -1]  # is en passant possible? enPassant[isPossible, x, y]
 isPromoting = False     # is a pawn promoting?
 popuplabel = []         # to save (and destroy) labels for pawn promotion
 pgn = str(appendPgn(""))# to append .pgn data

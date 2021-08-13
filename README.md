@@ -10,4 +10,4 @@
 to play run `python3 chess.py`
 
 
-[free for non commercial use][v0.93]
+[free for non commercial use][v0.94]
