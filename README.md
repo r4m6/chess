@@ -7,7 +7,7 @@
  -- hasnt been tested on windows yet --  
 
 # improvements are welcome :)   
-to play run `python3 chess.py`
+to play copy all files in the same directory and run `python3 chess.py` 
 
 
-[free for non commercial use][v0.94]
+[free for non commercial use][v1.00]

@@ -289,7 +289,6 @@ def validateTurn(chosenPiece, targetX, targetY, test=False):
 
     # reset en passant 
     if enPassant[0] and enPassant[3]==color and not test:
-        print("enPassant not active")
         enPassant[0] = False
 
     # check if the piece chosen belongs to the player at turn
@@ -398,8 +397,11 @@ def validateTurn(chosenPiece, targetX, targetY, test=False):
     return True
 
 def validateRook(rook, targetX, targetY):
+    global castling
+
     x = rook[1]
     y = rook[2]
+    color = "green" if rook[4].endswith("green") else "red"
     # rook moving on y axis
     if (x==targetX and y!=targetY):
         # moving up 
@@ -432,6 +434,12 @@ def validateRook(rook, targetX, targetY):
     else:
         return False
     
+    # mark rook as moved for castling evaluation
+    if (x == 0 and y == 700):
+        castling[color][1] = False
+    elif (x == 700 and y == 700):
+        castling[color][2] = False
+
     return True
 
 def validateBishop(bishop, targetX, targetY):
@@ -497,6 +505,8 @@ def validateKnight(knight, targetX, targetY):
         return False
 
 def validateKing(king, targetX, targetY):
+    global castling
+
     color = "green" if king[4].endswith("green") else "red"
     x = king[1]
     y = king[2]
@@ -507,6 +517,42 @@ def validateKing(king, targetX, targetY):
         if isChecked(color, targetX, targetY):
             return False
         else:
+            castling[color][0] = False
+            return True
+    # check if castling is possible
+    if (y==targetY and castling[color]\
+        and max(x, targetX) - min(x, targetX) == 200):
+        # check if king wasnt moved before and fields between arent checked
+        if (castling[color][0] and \
+            not isChecked(color, min(x, targetX), targetY) and \
+            not isChecked(color, min(x, targetX) + 100, targetY) and \
+            not isChecked(color, min(x, targetX) + 200, targetY)):
+            # check if a piece is between
+            for piece in pieces:
+                if piece[2]==y and \
+                    (piece[1]==min(x, targetX) or \
+                    piece[1]==min(x, targetX)+100 or \
+                    piece[1]==min(x, targetX)+200) and not \
+                    ((piece[4].startswith("king") or piece[4].startswith("rook")) and piece[4].endswith(color)):
+                    return False
+            # check if the corresponding rook was moved before and perform move if not
+            if (x > targetX and castling[color][1]):
+                for rook in pieces:
+                    if rook[1] == 0 and rook[2] == y:
+                        if color=="green":
+                            move(rook, 300, y)
+                        else:
+                            move(rook, 200, y)
+                        break
+            if (x < targetX and castling[color][2]):
+                for rook in pieces:
+                    if rook[1] == 700 and rook[2] == y:
+                        if color=="green":
+                            move(rook, 500, y)
+                        else:
+                            move(rook, 400, y)
+                        break
+            castling[color][0] = False
             return True
     # moving invalid
     else:
@@ -550,7 +596,6 @@ def validatePawn(pawn, targetX, targetY):
                     return True
             # check if its a possible en passant
             if enPassant[0] and enPassant[1]==targetX and enPassant[2]==targetY:
-                print("enPassant done")
                 # remove opp piece (and destroy if not checked yourself)
                 for piece in pieces:
                     if piece[1]==targetX and piece[2]==targetY+100:
@@ -834,14 +879,15 @@ main["menu"] = mBar
 ##############################################################################################################################################################################################
 ## start game preparation
 # chess board gets prepared... fields[i][label, x, y, color]
-fields = initFields()
+fields      = initFields()
 # pieces get prepared... pieces[i][label(in frame), x, y, image(rendered image), name(name of piece), selected(currently selected?)] 
-pieces = initPieces()
-turn = 1
-enPassant = [False, -1, -1]  # is en passant possible? enPassant[isPossible, x, y]
-isPromoting = False     # is a pawn promoting?
-popuplabel = []         # to save (and destroy) labels for pawn promotion
-pgn = str(appendPgn(""))# to append .pgn data
+pieces      = initPieces()
+turn        = 1
+enPassant   = [False, -1, -1]       # is en passant possible? enPassant[isPossible, x, y]
+castling    = {"green" : [True, True, True], "red" : [True, True, True]} # castling still possible?
+isPromoting = False                 # is a pawn promoting?
+popuplabel  = []                    # to save (and destroy) labels for pawn promotion
+pgn         = str(appendPgn(""))    # to append .pgn data
 ## end game preparation
 ##############################################################################################################################################################################################
 
